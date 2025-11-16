@@ -1,0 +1,68 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String?
+  address   String?
+  role      Role
+  rate      Int?     // only for vendors (per cloth)
+
+  // Back-relations for both sides with explicit relation names
+  customerClothes  ClothesEntry[] @relation("CustomerClothes")
+  vendorClothes    ClothesEntry[] @relation("VendorClothes")
+  customerPayments Payment[]      @relation("CustomerPayments")
+  vendorPayments   Payment[]      @relation("VendorPayments")
+
+  createdAt DateTime @default(now())
+}
+
+model ClothesEntry {
+  id          Int       @id @default(autoincrement())
+  customerId  Int
+  vendorId    Int
+  date        DateTime  @default(now())
+  count       Int
+  type        ClothType
+
+  customer    User      @relation("CustomerClothes", fields: [customerId], references: [id])
+  vendor      User      @relation("VendorClothes",   fields: [vendorId],   references: [id])
+}
+
+model Payment {
+  id         Int           @id @default(autoincrement())
+  customerId Int
+  vendorId   Int
+  month      String
+  total      Int
+  status     PaymentStatus  @default(PENDING)
+
+  customer   User           @relation("CustomerPayments", fields: [customerId], references: [id])
+  vendor     User           @relation("VendorPayments",   fields: [vendorId],   references: [id])
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+}
+
+enum ClothType {
+  GIVEN
+  RECEIVED
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+}
+
+
