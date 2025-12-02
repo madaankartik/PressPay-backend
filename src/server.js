@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import authRouter from './routes/auth.js'
+import clothesRouter from './routes/clothes.js'
 
 dotenv.config()
 
@@ -14,6 +15,7 @@ app.get('/', (req, res) => {
 })
 
 app.use('/auth', authRouter)
+app.use('/clothes', clothesRouter)
 
 const PORT = process.env.PORT || 4000
 app.listen(PORT, () => {
