@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 
-// Create entry
+
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { type, count, customerId, vendorId } = req.body || {}
@@ -23,7 +23,7 @@ router.post('/', requireAuth, async (req, res) => {
       if (!vendorId) return res.status(400).json({ ok: false, error: 'vendor_required' })
       entryData.customerId = req.user.id
       entryData.vendorId = Number(vendorId)
-      // Validate vendor exists and has role VENDOR to avoid FK errors
+
       const vendor = await prisma.user.findUnique({ where: { id: entryData.vendorId } })
       if (!vendor || vendor.role !== 'VENDOR') {
         return res.status(400).json({ ok: false, error: 'invalid_vendor' })
@@ -32,7 +32,7 @@ router.post('/', requireAuth, async (req, res) => {
       if (!customerId) return res.status(400).json({ ok: false, error: 'customer_required' })
       entryData.vendorId = req.user.id
       entryData.customerId = Number(customerId)
-      // Validate customer exists and has role CUSTOMER to avoid FK errors
+
       const customer = await prisma.user.findUnique({ where: { id: entryData.customerId } })
       if (!customer || customer.role !== 'CUSTOMER') {
         return res.status(400).json({ ok: false, error: 'invalid_customer' })
@@ -41,9 +41,9 @@ router.post('/', requireAuth, async (req, res) => {
     const entry = await prisma.clothesEntry.create({ data: entryData })
     return res.json({ ok: true, entry })
   } catch (e) {
-    // Map common Prisma errors to 400 where appropriate
+
     if (e && e.code === 'P2003') {
-      // Foreign key constraint failed
+
       return res.status(400).json({ ok: false, error: 'invalid_reference' })
     }
     console.error('clothes_post_error', e)
@@ -51,25 +51,68 @@ router.post('/', requireAuth, async (req, res) => {
   }
 })
 
-// List entries for logged-in user
+
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const {
+      page = '1',
+      pageSize = '10',
+      sortBy = 'date',
+      sortOrder = 'desc',
+      type,
+      q
+    } = req.query || {}
+
+    const numericPage = Math.max(1, Number(page) || 1)
+    const numericPageSize = Math.min(100, Math.max(1, Number(pageSize) || 10))
+    const skip = (numericPage - 1) * numericPageSize
+    const take = numericPageSize
+
     const where =
       req.user.role === 'CUSTOMER'
         ? { customerId: req.user.id }
         : { vendorId: req.user.id }
-    const entries = await prisma.clothesEntry.findMany({
-      where,
-      orderBy: { date: 'desc' }
+
+    if (type === 'GIVEN' || type === 'RECEIVED') {
+      where.type = type
+    }
+
+    if (q !== undefined && q !== null && String(q).trim() !== '') {
+      const qNum = Number(q)
+      if (Number.isFinite(qNum)) {
+        where.OR = [{ id: qNum }, { count: qNum }]
+      }
+    }
+
+    const validSortBy = ['date', 'count', 'id']
+    const orderByField = validSortBy.includes(String(sortBy)) ? String(sortBy) : 'date'
+    const orderDirection = String(sortOrder).toLowerCase() === 'asc' ? 'asc' : 'desc'
+
+    const [total, entries] = await Promise.all([
+      prisma.clothesEntry.count({ where }),
+      prisma.clothesEntry.findMany({
+        where,
+        orderBy: { [orderByField]: orderDirection },
+        skip,
+        take
+      })
+    ])
+
+    return res.json({
+      ok: true,
+      entries,
+      page: numericPage,
+      pageSize: numericPageSize,
+      total,
+      totalPages: Math.ceil(total / numericPageSize)
     })
-    return res.json({ ok: true, entries })
   } catch (e) {
     console.error('clothes_get_error', e)
     return res.status(500).json({ ok: false, error: 'server_error' })
   }
 })
 
-// Update entry
+
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id)
@@ -104,7 +147,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 })
 
-// Delete entry
+
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id)
